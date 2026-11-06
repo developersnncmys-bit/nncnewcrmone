@@ -8,7 +8,7 @@ export async function db() {
   if (cache.conn) return cache.conn;
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI is not set (see .env.local)");
-  cache.promise ??= mongoose.connect(uri, { bufferCommands: false });
+  cache.promise ??= mongoose.connect(uri, { bufferCommands: false, serverSelectionTimeoutMS: 8000 });
   try {
     cache.conn = await cache.promise;
   } catch (e) {

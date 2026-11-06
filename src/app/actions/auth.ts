@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { User, Workspace } from "@/lib/models";
 import { ROOT_DOMAIN } from "@/lib/utils";
 import { wsBase } from "@/lib/workspace";
+import { explainError } from "@/lib/config";
 
 export type FormState = { error?: string; ok?: boolean; message?: string } | undefined;
 
@@ -64,8 +65,14 @@ export async function changePasswordAction(_: FormState, fd: FormData): Promise<
 export async function adminLoginAction(_: FormState, fd: FormData): Promise<FormState> {
   const email = str(fd, "email").toLowerCase();
   const password = String(fd.get("password") ?? "");
-  await db();
-  let user = await User.findOne({ email, role: "superadmin" });
+  let user;
+  try {
+    await db();
+    user = await User.findOne({ email, role: "superadmin" });
+  } catch (e) {
+    console.error("[admin login]", e);
+    return { error: explainError(e) };
+  }
   // First login on a fresh database (e.g. new Vercel deploy): create the owner account
   // from SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD, but only if no admin exists yet.
   const envEmail = (process.env.SUPERADMIN_EMAIL || "").toLowerCase();
@@ -78,7 +85,11 @@ export async function adminLoginAction(_: FormState, fd: FormData): Promise<Form
     );
   }
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) return { error: "Invalid email or password." };
-  await createSession({ uid: String(user._id), role: "superadmin", name: user.name, email: user.email });
+  try {
+    await createSession({ uid: String(user._id), role: "superadmin", name: user.name, email: user.email });
+  } catch (e) {
+    return { error: explainError(e) };
+  }
   redirect("/admin");
 }
 

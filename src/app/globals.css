@@ -28,16 +28,19 @@
   color-scheme: light;
 }
 
-body {
-  @apply bg-paper text-slate-700 antialiased;
-  font-family: var(--font-sans);
-}
+/* Base layer, so utility classes like text-white on a heading still win */
+@layer base {
+  body {
+    @apply bg-paper text-slate-700 antialiased;
+    font-family: var(--font-sans);
+  }
 
-h1,
-h2,
-h3 {
-  @apply text-navy;
-  letter-spacing: -0.01em;
+  h1,
+  h2,
+  h3 {
+    @apply text-navy;
+    letter-spacing: -0.01em;
+  }
 }
 
 @layer components {
