@@ -25,6 +25,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               title: "Overview",
               items: [
                 { href: "/admin", label: "Dashboard", icon: "LayoutDashboard", exact: true },
+                { href: "/admin/leads", label: "Leads", icon: "Inbox", badge: counts.newLeads },
                 { href: "/admin/renewals", label: "Renewals", icon: "Bell", badge: counts.renewals, tone: "red" },
               ],
             },
@@ -35,10 +36,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 { href: "/admin/workspaces/new", label: "New customer", icon: "Sparkles" },
                 { href: "/admin/payments", label: "Payments & invoices", icon: "CreditCard" },
               ],
-            },
-            {
-              title: "Sales",
-              items: [{ href: "/admin/leads", label: "Leads", icon: "Inbox", badge: counts.newLeads }],
             },
             {
               title: "System",
