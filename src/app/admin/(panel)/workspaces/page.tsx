@@ -1,9 +1,9 @@
 import Link from "next/link";
+import { ExportButton } from "@/components/client-bits";
 import { Empty, PageHeader, WorkspaceStatus } from "@/components/ui";
-import { db } from "@/lib/db";
-import { Workspace } from "@/lib/models";
+import { WORKSPACES, byNewest, matches, ownerOf } from "@/lib/demo-data";
 import { PRODUCTS, isProductKey, productList, type ProductKey } from "@/lib/products";
-import { CYCLE_LIST, cycleLabel, daysLeft, escapeRegex, fmtDate, inr, tierLabel, workspaceHost } from "@/lib/utils";
+import { CYCLE_LIST, cycleLabel, daysLeft, fmtDate, inr, tierLabel, workspaceHost } from "@/lib/utils";
 
 export const metadata = { title: "Customers" };
 
@@ -20,20 +20,16 @@ export default async function AdminWorkspaces({
   searchParams: Promise<{ product?: string; status?: string; cycle?: string; q?: string }>;
 }) {
   const sp = await searchParams;
-  await db();
-  const filter: Record<string, unknown> = {};
-  if (isProductKey(sp.product)) filter.product = sp.product;
-  if (sp.status && STATUSES.some(([k]) => k === sp.status)) filter.status = sp.status;
-  if (CYCLE_LIST.some((c) => c.key === sp.cycle)) filter["plan.cycle"] = sp.cycle;
-  if (sp.q) {
-    const rx = { $regex: escapeRegex(sp.q), $options: "i" };
-    filter.$or = [{ companyName: rx }, { subdomain: rx }, { "contact.name": rx }, { "contact.email": rx }, { "contact.phone": rx }];
-  }
-  const list = await Workspace.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(500)
-    .populate<{ owner: { name: string; email: string } | null }>("owner", "name email")
-    .lean();
+  const list = byNewest(WORKSPACES)
+    .filter((w) => !isProductKey(sp.product) || w.product === sp.product)
+    .filter((w) => !STATUSES.some(([k]) => k === sp.status) || w.status === sp.status)
+    .filter((w) => !CYCLE_LIST.some((c) => c.key === sp.cycle) || w.plan.cycle === sp.cycle)
+    .filter((w) => matches(sp.q ?? "", w.companyName, w.subdomain, w.contact.name, w.contact.email, w.contact.phone))
+    .map((w) => ({ ...w, owner: ownerOf(w) }));
+  const exportRows = [
+    ["Company", "Domain", "Product", "Contact", "Email", "Phone", "Plan", "Billing", "Price (before GST)", "Status", "Valid till", "GSTIN", "State"],
+    ...byNewest(WORKSPACES).map((w) => [w.companyName, workspaceHost(w.subdomain), PRODUCTS[w.product as ProductKey].name, w.contact.name, w.contact.email, w.contact.phone, tierLabel(w.plan.tier), cycleLabel(w.plan.cycle), w.plan.price, w.status, fmtDate(w.currentPeriodEnd), w.billing.gstin, w.billing.state]),
+  ];
 
   return (
     <>
@@ -42,10 +38,9 @@ export default async function AdminWorkspaces({
         subtitle="Every customer CRM with its domain, plan, billing term and subscription status."
         actions={
           <>
-            { }
-            <a href="/admin/export/customers" download className="btn btn-outline">
+            <ExportButton filename="customers.csv" rows={exportRows} className="btn btn-outline">
               Export to Excel
-            </a>
+            </ExportButton>
             <Link href="/admin/workspaces/new" className="btn btn-primary">
               + New customer
             </Link>

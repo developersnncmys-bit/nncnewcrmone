@@ -1,13 +1,10 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { workspaceLoginAction } from "@/app/actions/auth";
 import { WorkspaceLoginForm } from "@/components/AuthForms";
 import { Icon } from "@/components/Icon";
-import { getSession } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { Workspace } from "@/lib/models";
+import { wsBySub } from "@/lib/demo-data";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
 import { BRAND, workspaceHost } from "@/lib/utils";
-import { wsBase } from "@/lib/workspace";
 
 export const metadata = { title: "Log in", robots: { index: false } };
 
@@ -21,14 +18,8 @@ export default async function WorkspaceLogin({
 }) {
   const { sub } = await params;
   const { next } = await searchParams;
-  await db();
-  const ws = await Workspace.findOne({ subdomain: sub.toLowerCase() }).select("companyName product owner members subdomain").lean();
+  const ws = wsBySub(sub);
   if (!ws) notFound();
-
-  const s = await getSession();
-  if (s && (String(ws.owner) === s.uid || ws.members.some((m) => String(m.user) === s.uid))) {
-    redirect((await wsBase(sub)) || "/");
-  }
   const p = PRODUCTS[ws.product as ProductKey];
 
   return (

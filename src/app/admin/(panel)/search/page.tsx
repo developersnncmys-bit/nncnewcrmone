@@ -1,29 +1,17 @@
 import Link from "next/link";
 import { Badge, Empty, Panel, WorkspaceStatus } from "@/components/ui";
-import { db } from "@/lib/db";
-import { Lead, Payment, Workspace } from "@/lib/models";
+import { LEADS, PAYMENTS, WORKSPACES, byNewest, matches, wsById } from "@/lib/demo-data";
 import { PRODUCTS, isProductKey, type ProductKey } from "@/lib/products";
-import { escapeRegex, fmtDate, inr, workspaceHost } from "@/lib/utils";
+import { fmtDate, inr, workspaceHost } from "@/lib/utils";
 
 export const metadata = { title: "Search" };
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const q = ((await searchParams).q || "").trim();
   if (!q) return <Empty title="Type something in the search box">Search by company, domain, contact name, phone, email or invoice number.</Empty>;
-  await db();
-  const rx = { $regex: escapeRegex(q), $options: "i" };
-  const [customers, leads, payments] = await Promise.all([
-    Workspace.find({
-      $or: [{ companyName: rx }, { subdomain: rx }, { "contact.name": rx }, { "contact.email": rx }, { "contact.phone": rx }, { "billing.gstin": rx }],
-    })
-      .limit(25)
-      .lean(),
-    Lead.find({ $or: [{ name: rx }, { email: rx }, { phone: rx }, { company: rx }] }).sort({ createdAt: -1 }).limit(25).lean(),
-    Payment.find({ $or: [{ invoiceNumber: rx }, { razorpayPaymentId: rx }] })
-      .limit(25)
-      .populate<{ workspace: { _id: string; companyName: string } | null }>("workspace", "companyName")
-      .lean(),
-  ]);
+  const customers = WORKSPACES.filter((w) => matches(q, w.companyName, w.subdomain, w.contact.name, w.contact.email, w.contact.phone, w.billing.gstin));
+  const leads = byNewest(LEADS).filter((l) => matches(q, l.name, l.email, l.phone, l.company));
+  const payments = PAYMENTS.filter((p) => matches(q, p.invoiceNumber, p.razorpayPaymentId)).map((p) => ({ ...p, workspace: wsById(p.workspace) }));
   const total = customers.length + leads.length + payments.length;
 
   return (

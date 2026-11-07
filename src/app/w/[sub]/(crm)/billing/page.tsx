@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { payForWorkspace, scheduleChange } from "@/app/actions/checkout";
 import { Badge, Notice, PageHeader, WorkspaceStatus } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
 import { GRACE_DAYS, renewalPlanFor } from "@/lib/billing";
-import { Payment } from "@/lib/models";
+import { paymentsOf } from "@/lib/demo-data";
 import { getPlans } from "@/lib/plans";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
 import { CYCLE_LIST, GST_RATE, cycleLabel, cyclePer, daysLeft, fmtDate, inr, tierLabel, workspaceHost } from "@/lib/utils";
@@ -20,14 +19,13 @@ export default async function BillingPage({
 }) {
   const { sub } = await params;
   const { scheduled } = await searchParams;
-  const s = await requireUser();
-  const { ws, role } = await getWorkspaceAccess(sub, s);
-  const base = await wsBase(sub);
+  const { ws, role } = await getWorkspaceAccess(sub);
+  const base = wsBase(sub);
   const manage = canManage(role);
   const p = PRODUCTS[ws.product as ProductKey];
-  const plans = await getPlans(ws.product as ProductKey);
-  const renewal = await renewalPlanFor(ws);
-  const payments = await Payment.find({ workspace: ws._id }).sort({ createdAt: -1 }).lean();
+  const plans = getPlans(ws.product as ProductKey);
+  const renewal = renewalPlanFor(ws);
+  const payments = paymentsOf(ws._id);
   const unpaid = payments.find((x) => x.status === "created");
   // Never paid yet (pending, trial, or a trial that ended and got locked)
   const isNew = ws.status === "pending" || ws.status === "trial" || !ws.currentPeriodStart;

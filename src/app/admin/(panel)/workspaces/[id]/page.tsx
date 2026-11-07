@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { isValidObjectId } from "mongoose";
 import { adminWorkspaceAction, changePlan, resetOwnerLogin, sendPaymentLink, updateCustomer } from "@/app/actions/admin";
 import { ConfirmButton } from "@/components/client-bits";
 import { ActionButton, ResultForm, SubmitButton } from "@/components/admin-ui";
 import { Badge, PageHeader, WorkspaceStatus } from "@/components/ui";
 import { loginUrl, renewalPlanFor } from "@/lib/billing";
-import { db } from "@/lib/db";
-import { CrmRecord, EmailLog, Payment, User, Workspace } from "@/lib/models";
-import { payLink } from "@/lib/paylink";
+import { EMAILS, RECORDS, ownerOf, paymentsOf, userById, wsById } from "@/lib/demo-data";
 import { PLANS } from "@/lib/plans";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
 import { CYCLE_LIST, cycleLabel, daysLeft, fmtDate, fmtDateTime, inr, tierLabel, withGst, workspaceHost, workspaceUrl } from "@/lib/utils";
@@ -17,17 +14,13 @@ export const metadata = { title: "Customer" };
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!isValidObjectId(id)) notFound();
-  await db();
-  const ws = await Workspace.findById(id).lean();
+  const ws = wsById(id);
   if (!ws) notFound();
-  const [owner, payments, members, records, mails] = await Promise.all([
-    User.findById(ws.owner).lean(),
-    Payment.find({ workspace: ws._id }).sort({ createdAt: -1 }).lean(),
-    User.find({ _id: { $in: ws.members.map((m) => m.user) } }).select("name email").lean(),
-    CrmRecord.countDocuments({ workspace: ws._id }),
-    EmailLog.find({ workspace: ws._id }).sort({ createdAt: -1 }).limit(30).lean(),
-  ]);
+  const owner = ownerOf(ws);
+  const payments = paymentsOf(ws._id);
+  const members = ws.members.map((m) => userById(m.user)).filter((u) => u !== null);
+  const records = RECORDS.filter((r) => r.workspace === ws._id).length;
+  const mails = EMAILS.filter((m) => m.workspace === ws._id).slice(0, 30);
   const activity = [
     { at: ws.createdAt, text: "CRM created", sub: `${tierLabel(ws.plan.tier)} plan`, tone: "indigo" as const },
     ...payments
@@ -37,7 +30,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
   ].sort((a, b) => +new Date(b.at) - +new Date(a.at));
   const DOT = { indigo: "bg-indigo-600", green: "bg-emerald-500", red: "bg-rose-500", slate: "bg-slate-300" };
   const p = PRODUCTS[ws.product as ProductKey];
-  const renewal = await renewalPlanFor(ws);
+  const renewal = renewalPlanFor(ws);
   const plan = PLANS.find((x) => x.tier === ws.plan.tier);
   const neverPaid = ws.status === "pending" || !ws.currentPeriodStart;
   const end = ws.status === "grace" ? ws.graceEndsAt : ws.currentPeriodEnd;
@@ -192,7 +185,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                               Invoice
                             </a>
                           ) : x.status === "created" ? (
-                            <a href={payLink(String(x._id))} target="_blank" className="btn btn-outline btn-sm">
+                            <a href={`/pay/${x._id}`} target="_blank" className="btn btn-outline btn-sm">
                               Pay link
                             </a>
                           ) : null}

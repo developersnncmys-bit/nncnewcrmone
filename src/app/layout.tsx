@@ -14,8 +14,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body className={`${figtree.variable} ${mono.variable}`}>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${figtree.variable} ${mono.variable}`} suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

@@ -4,8 +4,7 @@ import { BarList, ColumnChart } from "@/components/charts";
 import { Icon } from "@/components/Icon";
 import { Badge, Kpi, Notice, Panel } from "@/components/ui";
 import { renewalBuckets } from "@/lib/admin-stats";
-import { db } from "@/lib/db";
-import { Lead, Payment, Workspace } from "@/lib/models";
+import { LEADS, PAYMENTS, WORKSPACES, byNewest, wsById } from "@/lib/demo-data";
 import { PLANS } from "@/lib/plans";
 import { PRODUCTS, isProductKey, productList, type ProductKey } from "@/lib/products";
 import { CYCLE_LIST, cycleLabel, cycleMonths, daysLeft, fmtDate, fmtDateTime, inr, tierLabel } from "@/lib/utils";
@@ -16,27 +15,23 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 export default async function AdminDashboard({ searchParams }: { searchParams: Promise<{ job?: string }> }) {
   const { job } = await searchParams;
-  await db();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const yearStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-  const [byMonth, wsAll, leadsByStatus, recentPays, recentLeads, buckets, paidAll] = await Promise.all([
-    Payment.aggregate<{ _id: { y: number; m: number }; t: number; n: number }>([
-      { $match: { status: "paid", paidAt: { $gte: yearStart } } },
-      { $group: { _id: { y: { $year: "$paidAt" }, m: { $month: "$paidAt" } }, t: { $sum: "$amount" }, n: { $sum: 1 } } },
-    ]),
-    Workspace.find().select("status plan product currentPeriodEnd").lean(),
-    Lead.aggregate<{ _id: string; n: number }>([{ $group: { _id: "$status", n: { $sum: 1 } } }]),
-    Payment.find({ status: "paid" }).sort({ paidAt: -1 }).limit(6).populate<{ workspace: { companyName: string; subdomain: string; _id: string } | null }>("workspace", "companyName subdomain").lean(),
-    Lead.find().sort({ createdAt: -1 }).limit(6).lean(),
-    renewalBuckets(),
-    Payment.aggregate<{ t: number }>([{ $match: { status: "paid" } }, { $group: { _id: null, t: { $sum: "$amount" } } }]),
-  ]);
+  const paid = PAYMENTS.filter((p) => p.status === "paid");
+  const wsAll = WORKSPACES;
+  const recentPays = [...paid]
+    .sort((a, b) => +b.paidAt! - +a.paidAt!)
+    .slice(0, 6)
+    .map((p) => ({ ...p, workspace: wsById(p.workspace) }));
+  const recentLeads = byNewest(LEADS).slice(0, 6);
+  const buckets = renewalBuckets();
+  const allTime = paid.reduce((a, p) => a + p.amount, 0);
 
   // ---- revenue (before GST) ----
-  const monthVal = (y: number, m: number) => byMonth.find((b) => b._id.y === y && b._id.m === m)?.t ?? 0;
+  const monthVal = (y: number, m: number) =>
+    paid.filter((p) => p.paidAt!.getFullYear() === y && p.paidAt!.getMonth() + 1 === m).reduce((a, p) => a + p.amount, 0);
   const series = Array.from({ length: 12 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
     const v = monthVal(d.getFullYear(), d.getMonth() + 1);
@@ -54,8 +49,8 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
   const dueAmount = buckets.due.reduce((a, r) => a + r.dueTotal, 0);
   const overdueAmount = [...buckets.grace, ...buckets.lapsed].reduce((a, r) => a + r.dueTotal, 0);
   const pendingAmount = buckets.pending.reduce((a, r) => a + r.dueTotal, 0);
-  const leadN = (k: string) => leadsByStatus.find((l) => l._id === k)?.n ?? 0;
-  const leadTotal = leadsByStatus.reduce((a, l) => a + l.n, 0);
+  const leadN = (k: string) => LEADS.filter((l) => l.status === k).length;
+  const leadTotal = LEADS.length;
 
   const upcoming = [...buckets.grace, ...buckets.due].slice(0, 7);
 
@@ -112,7 +107,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
         >
           <ColumnChart data={series} />
           <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
-            <span>All-time revenue: <b className="text-slate-700">{inr(paidAll[0]?.t ?? 0)}</b></span>
+            <span>All-time revenue: <b className="text-slate-700">{inr(allTime)}</b></span>
             <span>Overdue renewals: <b className="text-slate-700">{inr(overdueAmount)}</b></span>
           </div>
         </Panel>

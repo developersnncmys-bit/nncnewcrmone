@@ -1,8 +1,6 @@
-import { isValidObjectId } from "mongoose";
 import { NewCustomerForm } from "@/components/admin-ui";
 import { PageHeader } from "@/components/ui";
-import { db } from "@/lib/db";
-import { Lead } from "@/lib/models";
+import { LEADS } from "@/lib/demo-data";
 import { PLANS } from "@/lib/plans";
 import { productList } from "@/lib/products";
 import { ROOT_DOMAIN } from "@/lib/utils";
@@ -11,8 +9,7 @@ export const metadata = { title: "New customer" };
 
 export default async function NewCustomerPage({ searchParams }: { searchParams: Promise<{ lead?: string }> }) {
   const { lead: leadId } = await searchParams;
-  await db();
-  const lead = leadId && isValidObjectId(leadId) ? await Lead.findById(leadId).lean() : null;
+  const lead = LEADS.find((l) => l._id === leadId) ?? null;
 
   return (
     <>

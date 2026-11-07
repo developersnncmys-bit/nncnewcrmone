@@ -1,4 +1,4 @@
-import type { Cycle, Tier } from "./models";
+import type { Cycle, Tier } from "./types";
 
 // Fixed plans, same as the nncdigital.co.in pricing page (INR, before GST).
 // Same for every product (Travel / Sales / HRMS). To change prices, edit here and redeploy.

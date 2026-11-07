@@ -1,22 +1,22 @@
 import { notFound } from "next/navigation";
-import { isValidObjectId } from "mongoose";
 import { PrintButton } from "@/components/client-bits";
-import { requireUser } from "@/lib/auth";
-import { Payment, User } from "@/lib/models";
+import { ownerOf, paymentsOf } from "@/lib/demo-data";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
 import { BRAND, cycleLabel, fmtDate, inr, tierLabel, workspaceHost } from "@/lib/utils";
 import { canManage, getWorkspaceAccess } from "@/lib/workspace";
 
 export const metadata = { title: "Invoice" };
 
+const COMPANY_ADDRESS = "NNC Digital, Mysuru, Karnataka";
+const COMPANY_GSTIN = "29AAKCN0000A1Z9";
+
 export default async function InvoicePage({ params }: { params: Promise<{ sub: string; id: string }> }) {
   const { sub, id } = await params;
-  const s = await requireUser();
-  const { ws, role } = await getWorkspaceAccess(sub, s);
-  if (!canManage(role) || !isValidObjectId(id)) notFound();
-  const pay = await Payment.findOne({ _id: id, workspace: ws._id, status: "paid" }).lean();
+  const { ws, role } = await getWorkspaceAccess(sub);
+  if (!canManage(role)) notFound();
+  const pay = paymentsOf(ws._id).find((p) => p._id === id && p.status === "paid");
   if (!pay) notFound();
-  const owner = await User.findById(ws.owner).lean();
+  const owner = ownerOf(ws);
   const p = PRODUCTS[ws.product as ProductKey];
 
   return (
@@ -28,8 +28,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ sub: s
         <div className="flex items-start justify-between">
           <div>
             <div className="text-2xl font-bold text-indigo-600">{BRAND}</div>
-            <div className="mt-1 text-sm text-slate-500">{process.env.COMPANY_ADDRESS || ""}</div>
-            {process.env.COMPANY_GSTIN && <div className="text-sm text-slate-500">GSTIN: {process.env.COMPANY_GSTIN}</div>}
+            <div className="mt-1 text-sm text-slate-500">{COMPANY_ADDRESS}</div>
+            <div className="text-sm text-slate-500">GSTIN: {COMPANY_GSTIN}</div>
           </div>
           <div className="text-right">
             <div className="text-xl font-semibold text-slate-900">INVOICE</div>

@@ -5,7 +5,6 @@ import { Icon } from "@/components/Icon";
 import { requireAdmin } from "@/lib/auth";
 import { GRACE_DAYS, REMINDER_DAYS } from "@/lib/billing";
 import { PLANS } from "@/lib/plans";
-import { razorpayEnabled } from "@/lib/razorpay";
 import { APP_URL, CYCLE_LIST, GST_RATE, ROOT_DOMAIN, USE_SUBDOMAINS, WEBSITE_URL, inr } from "@/lib/utils";
 
 export const metadata = { title: "Settings" };
@@ -17,13 +16,13 @@ function Status({ ok, good, bad }: { ok: boolean; good: string; bad: string }) {
 export default async function SettingsPage() {
   const s = await requireAdmin();
   const rows: [string, React.ReactNode, string][] = [
-    ["Razorpay payments", <Status key="r" ok={razorpayEnabled()} good="Live keys connected" bad="Test mode – payments are simulated" />, "RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET"],
-    ["Razorpay webhook", <Status key="w" ok={!!process.env.RAZORPAY_WEBHOOK_SECRET} good="Configured" bad="Not configured" />, "RAZORPAY_WEBHOOK_SECRET"],
-    ["Email sending (SMTP)", <Status key="m" ok={!!process.env.SMTP_HOST} good={`Sending via ${process.env.SMTP_HOST}`} bad="Not configured – emails are only logged" />, "SMTP_HOST, SMTP_USER, SMTP_PASS"],
-    ["New-lead alerts to", process.env.ADMIN_EMAIL || <span className="text-slate-400">not set</span>, "ADMIN_EMAIL"],
+    ["Razorpay payments", <Status key="r" ok={false} good="Live keys connected" bad="Demo mode – payments are simulated" />, "RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET"],
+    ["Razorpay webhook", <Status key="w" ok={false} good="Configured" bad="Not configured" />, "RAZORPAY_WEBHOOK_SECRET"],
+    ["Email sending (SMTP)", <Status key="m" ok={false} good="Sending" bad="Demo mode – emails are not sent" />, "SMTP_HOST, SMTP_USER, SMTP_PASS"],
+    ["New-lead alerts to", s.email, "ADMIN_EMAIL"],
     ["Customer domains", USE_SUBDOMAINS ? `*.${ROOT_DOMAIN}` : `${APP_URL}/w/<name> (local mode)`, "ROOT_DOMAIN"],
     ["Website", WEBSITE_URL, "NEXT_PUBLIC_WEBSITE_URL"],
-    ["Invoice company details", process.env.COMPANY_GSTIN ? `GSTIN ${process.env.COMPANY_GSTIN}` : <span className="text-slate-400">GSTIN / address not set</span>, "COMPANY_ADDRESS, COMPANY_GSTIN"],
+    ["Invoice company details", "GSTIN 29AAKCN0000A1Z9", "COMPANY_ADDRESS, COMPANY_GSTIN"],
   ];
 
   return (
@@ -85,7 +84,7 @@ export default async function SettingsPage() {
           </div>
           <p className="mt-8 flex items-start gap-2 text-xs text-slate-500">
             <Icon name="ShieldCheck" size={14} className="mt-0.5 shrink-0" />
-            Keys are kept in the server file .env.local (never in the database). Change them there and restart the app.
+            UI-only demo: connections are shown for layout only. Nothing is connected.
           </p>
         </Panel>
 

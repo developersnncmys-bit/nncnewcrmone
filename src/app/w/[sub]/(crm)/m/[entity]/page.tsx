@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { isValidObjectId } from "mongoose";
 import { deleteRecord, saveRecord, setRecordStatus } from "@/app/actions/records";
 import { AutoSubmitSelect, ConfirmButton } from "@/components/client-bits";
 import { Icon } from "@/components/Icon";
 import { RecordForm } from "@/components/RecordForm";
 import { Badge, Empty, Notice, PageHeader, valueTone } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { CrmRecord } from "@/lib/models";
+import { RECORDS, byNewest, matches } from "@/lib/demo-data";
 import { getEntity, type Field, type ProductKey } from "@/lib/products";
-import { escapeRegex, fmtDate, inr } from "@/lib/utils";
+import { fmtDate, inr } from "@/lib/utils";
 import { getUsableWorkspace, wsBase } from "@/lib/workspace";
 
 type SP = { q?: string; status?: string; view?: string; new?: string; edit?: string; saved?: string };
@@ -31,37 +29,30 @@ export default async function EntityPage({
 }) {
   const { sub, entity: entityKey } = await params;
   const sp = await searchParams;
-  const s = await requireUser();
-  const { ws } = await getUsableWorkspace(sub, s);
+  const { ws } = await getUsableWorkspace(sub);
   const entity = getEntity(ws.product as ProductKey, entityKey);
   if (!entity) notFound();
-  const base = await wsBase(sub);
+  const base = wsBase(sub);
   const href = `${base}/m/${entity.key}`;
   const statusF = entity.fields.find((f) => f.key === entity.statusField);
   const view = entity.board && sp.view === "board" ? "board" : "list";
 
   // ---- query ----
-  const filter: Record<string, unknown> = { workspace: ws._id, entity: entity.key };
-  if (sp.q) {
-    const rx = { $regex: escapeRegex(sp.q), $options: "i" };
-    filter.$or = entity.fields
-      .filter((f) => ["text", "email", "phone", "ref", "textarea", "select"].includes(f.type))
-      .map((f) => ({ [`data.${f.key}`]: rx }));
-  }
-  if (sp.status && statusF) filter[`data.${statusF.key}`] = sp.status;
-  const rows = await CrmRecord.find(filter).sort({ createdAt: -1 }).limit(500).lean();
+  const all = RECORDS.filter((r) => r.workspace === ws._id && r.entity === entity.key);
+  const textFields = entity.fields.filter((f) => ["text", "email", "phone", "ref", "textarea", "select"].includes(f.type));
+  const rows = byNewest(all)
+    .filter((r) => matches(sp.q ?? "", ...textFields.map((f) => String(r.data[f.key] ?? ""))))
+    .filter((r) => !(sp.status && statusF) || r.data[statusF.key] === sp.status);
 
   // ---- form (new / edit) ----
-  const editing = sp.edit && isValidObjectId(sp.edit)
-    ? await CrmRecord.findOne({ _id: sp.edit, workspace: ws._id, entity: entity.key }).lean()
-    : null;
+  const editing = sp.edit ? (all.find((r) => r._id === sp.edit) ?? null) : null;
   const showForm = !!sp.new || !!editing;
   const refOptions: Record<string, string[]> = {};
   if (showForm) {
     for (const f of entity.fields.filter((x) => x.type === "ref" && x.ref)) {
       const refEntity = getEntity(ws.product as ProductKey, f.ref!);
       if (!refEntity) continue;
-      const refs = await CrmRecord.find({ workspace: ws._id, entity: refEntity.key }).select("data").limit(1000).lean();
+      const refs = RECORDS.filter((r) => r.workspace === ws._id && r.entity === refEntity.key);
       refOptions[f.key] = [...new Set(refs.map((r) => String((r.data as Record<string, unknown>)[refEntity.titleField] ?? "")).filter(Boolean))];
     }
   }

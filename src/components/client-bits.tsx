@@ -139,3 +139,22 @@ export function AdminSideNav({ sections }: { sections: { title: string; items: A
     </nav>
   );
 }
+
+/** Downloads the given rows as a CSV file (opens in Excel). Built in the browser, no server needed. */
+export function ExportButton({ filename, rows, className, children }: { filename: string; rows: (string | number)[][]; className?: string; children: ReactNode }) {
+  function download() {
+    const esc = (v: string | number) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = "\uFEFF" + rows.map((r) => r.map(esc).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return (
+    <button type="button" onClick={download} className={className}>
+      {children}
+    </button>
+  );
+}

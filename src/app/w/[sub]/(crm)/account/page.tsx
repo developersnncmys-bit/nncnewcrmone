@@ -1,11 +1,11 @@
 import { ChangePasswordForm } from "@/components/AuthForms";
 import { PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
+import { getWorkspaceAccess } from "@/lib/workspace";
 
 export const metadata = { title: "My account" };
 
-export default async function AccountPage() {
-  const s = await requireUser();
+export default async function AccountPage({ params }: { params: Promise<{ sub: string }> }) {
+  const { s } = await getWorkspaceAccess((await params).sub);
   return (
     <>
       <PageHeader title="My account" subtitle={`${s.name} · ${s.email}`} />

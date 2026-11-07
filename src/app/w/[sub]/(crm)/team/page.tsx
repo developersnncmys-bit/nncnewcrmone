@@ -2,8 +2,7 @@ import { notFound } from "next/navigation";
 import { addMember, removeMember } from "@/app/actions/team";
 import { ConfirmButton, TeamForm } from "@/components/client-bits";
 import { Badge, PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { User } from "@/lib/models";
+import { userById } from "@/lib/demo-data";
 import { getPlan } from "@/lib/plans";
 import { canManage, getUsableWorkspace } from "@/lib/workspace";
 
@@ -11,14 +10,11 @@ export const metadata = { title: "Team" };
 
 export default async function TeamPage({ params }: { params: Promise<{ sub: string }> }) {
   const { sub } = await params;
-  const s = await requireUser();
-  const { ws, role } = await getUsableWorkspace(sub, s);
+  const { ws, role } = await getUsableWorkspace(sub);
   if (!canManage(role)) notFound();
-  const plan = await getPlan(ws.product, ws.plan.tier);
-  const ids = [ws.owner, ...ws.members.map((m) => m.user)];
-  const users = await User.find({ _id: { $in: ids } }).select("name email").lean();
-  const byId = new Map(users.map((u) => [String(u._id), u]));
-  const owner = byId.get(String(ws.owner));
+  const plan = getPlan(ws.product, ws.plan.tier);
+  const byId = { get: (id: string) => userById(id) };
+  const owner = userById(ws.owner);
   const used = ws.members.length + 1;
 
   return (

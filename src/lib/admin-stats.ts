@@ -1,7 +1,6 @@
-import "server-only";
 import { renewalPlanFor } from "./billing";
-import { db } from "./db";
-import { EmailLog, Lead, Payment, Workspace } from "./models";
+import { EMAILS, LEADS, PAYMENTS, WORKSPACES, ownerOf, wsById } from "./demo-data";
+import type { WorkspaceT } from "./types";
 import { DAY, withGst } from "./utils";
 
 export const RENEWAL_TABS = [
@@ -13,66 +12,45 @@ export const RENEWAL_TABS = [
 ] as const;
 export type RenewalTab = (typeof RENEWAL_TABS)[number]["key"];
 
-const OWNER = "name email phone";
+const MAIL_TYPES = /^(reminder_|expired|locked|payment_link|welcome)/;
+const time = (d: Date | null) => (d ? d.getTime() : 0);
 
-/** Workspaces in each renewal bucket, with the amount due (incl. GST) and the last reminder sent. */
-export async function renewalBuckets() {
-  await db();
-  const now = new Date();
-  const in30 = new Date(now.getTime() + 30 * DAY);
-  const [due, grace, lapsed, pending, renewedPays] = await Promise.all([
-    Workspace.find({ status: "active", currentPeriodEnd: { $lte: in30 } }).sort({ currentPeriodEnd: 1 }).populate("owner", OWNER).lean(),
-    Workspace.find({ status: "grace" }).sort({ graceEndsAt: 1 }).populate("owner", OWNER).lean(),
-    Workspace.find({ status: "locked", currentPeriodStart: { $ne: null } }).sort({ currentPeriodEnd: -1 }).populate("owner", OWNER).lean(),
-    Workspace.find({ status: "pending" }).sort({ createdAt: -1 }).populate("owner", OWNER).lean(),
-    Payment.find({ status: "paid", kind: "renewal", paidAt: { $gte: new Date(now.getTime() - 30 * DAY) } }).sort({ paidAt: -1 }).lean(),
-  ]);
-  const renewedWs = await Workspace.find({ _id: { $in: renewedPays.map((p) => p.workspace) } }).populate("owner", OWNER).lean();
+/** Customers in each renewal bucket, with the amount due (incl. GST) and the last reminder sent. */
+export function renewalBuckets() {
+  const now = Date.now();
+  const in30 = now + 30 * DAY;
+  const by = (f: (w: WorkspaceT) => boolean, sort: (a: WorkspaceT, b: WorkspaceT) => number) => WORKSPACES.filter(f).sort(sort);
 
-  const all = [...due, ...grace, ...lapsed, ...pending, ...renewedWs];
-  const reminders = await EmailLog.aggregate<{ _id: unknown; at: Date; type: string }>([
-    { $match: { workspace: { $in: all.map((w) => w._id) }, type: { $regex: /^(reminder_|expired|locked|payment_link|welcome)/ } } },
-    { $sort: { createdAt: -1 } },
-    { $group: { _id: "$workspace", at: { $first: "$createdAt" }, type: { $first: "$type" } } },
-  ]);
-  const lastMail = new Map(reminders.map((r) => [String(r._id), r]));
+  const enrich = (list: WorkspaceT[]) =>
+    list.map((ws) => {
+      const next = renewalPlanFor(ws);
+      const last = EMAILS.find((m) => m.workspace === ws._id && MAIL_TYPES.test(m.type));
+      return {
+        ws,
+        owner: ownerOf(ws),
+        next,
+        dueTotal: withGst(next.amount).total,
+        lastMail: last ? { at: last.createdAt, type: last.type } : null,
+      };
+    });
 
-  const enrich = async (list: typeof due) =>
-    Promise.all(
-      list.map(async (w) => {
-        const r = await renewalPlanFor(w);
-        return {
-          ws: w,
-          owner: w.owner as unknown as { name: string; email: string; phone: string } | null,
-          next: r,
-          dueTotal: withGst(r.amount).total,
-          lastMail: lastMail.get(String(w._id)) ?? null,
-        };
-      }),
-    );
-
-  const renewed = renewedWs.map((w) => {
-    const p = renewedPays.find((x) => String(x.workspace) === String(w._id))!;
-    return { ws: w, owner: w.owner as unknown as { name: string; email: string; phone: string } | null, payment: p };
-  });
+  const renewed = PAYMENTS.filter((p) => p.status === "paid" && p.kind === "renewal" && time(p.paidAt) >= now - 30 * DAY)
+    .sort((a, b) => time(b.paidAt) - time(a.paidAt))
+    .map((payment) => ({ ws: wsById(payment.workspace)!, owner: ownerOf(wsById(payment.workspace)!), payment }));
 
   return {
-    due: await enrich(due),
-    grace: await enrich(grace),
-    lapsed: await enrich(lapsed),
-    pending: await enrich(pending),
+    due: enrich(by((w) => w.status === "active" && time(w.currentPeriodEnd) <= in30, (a, b) => time(a.currentPeriodEnd) - time(b.currentPeriodEnd))),
+    grace: enrich(by((w) => w.status === "grace", (a, b) => time(a.graceEndsAt) - time(b.graceEndsAt))),
+    lapsed: enrich(by((w) => w.status === "locked" && !!w.currentPeriodStart, (a, b) => time(b.currentPeriodEnd) - time(a.currentPeriodEnd))),
+    pending: enrich(by((w) => w.status === "pending", (a, b) => +b.createdAt - +a.createdAt)),
     renewed,
   };
 }
 
 /** Small counts for the sidebar badges. */
-export async function navCounts() {
-  await db();
-  const in30 = new Date(Date.now() + 30 * DAY);
-  const [due, grace, newLeads] = await Promise.all([
-    Workspace.countDocuments({ status: "active", currentPeriodEnd: { $lte: in30 } }),
-    Workspace.countDocuments({ status: { $in: ["grace"] } }),
-    Lead.countDocuments({ status: "new" }),
-  ]);
-  return { renewals: due + grace, newLeads };
+export function navCounts() {
+  const in30 = Date.now() + 30 * DAY;
+  const due = WORKSPACES.filter((w) => w.status === "active" && time(w.currentPeriodEnd) <= in30).length;
+  const grace = WORKSPACES.filter((w) => w.status === "grace").length;
+  return { renewals: due + grace, newLeads: LEADS.filter((l) => l.status === "new").length };
 }

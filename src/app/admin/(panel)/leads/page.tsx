@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { addLeadManually, updateLead } from "@/app/actions/admin";
 import { ResultForm, SubmitButton } from "@/components/admin-ui";
+import { ExportButton } from "@/components/client-bits";
 import { Icon } from "@/components/Icon";
 import { Badge, Empty, type Tone } from "@/components/ui";
-import { db } from "@/lib/db";
-import { Lead } from "@/lib/models";
+import { LEADS, byNewest, matches, wsById } from "@/lib/demo-data";
 import { PRODUCTS, isProductKey, productList, type ProductKey } from "@/lib/products";
-import { escapeRegex, fmtDateTime, workspaceHost } from "@/lib/utils";
+import { fmtDateTime, workspaceHost } from "@/lib/utils";
 
 export const metadata = { title: "Leads" };
 
@@ -25,19 +25,16 @@ export default async function AdminLeads({
   searchParams: Promise<{ product?: string; status?: string; q?: string; id?: string; add?: string }>;
 }) {
   const sp = await searchParams;
-  await db();
-  const filter: Record<string, unknown> = {};
-  if (isProductKey(sp.product)) filter.product = sp.product;
-  if (sp.status && STATUS[sp.status]) filter.status = sp.status;
-  if (sp.q) {
-    const rx = { $regex: escapeRegex(sp.q), $options: "i" };
-    filter.$or = [{ name: rx }, { email: rx }, { phone: rx }, { company: rx }];
-  }
-  const [leads, counts] = await Promise.all([
-    Lead.find(filter).sort({ createdAt: -1 }).limit(300).populate<{ workspace: { _id: string; subdomain: string } | null }>("workspace", "subdomain").lean(),
-    Lead.aggregate<{ _id: string; n: number }>([{ $group: { _id: "$status", n: { $sum: 1 } } }]),
-  ]);
-  const count = (k?: string) => (k ? (counts.find((c) => c._id === k)?.n ?? 0) : counts.reduce((a, c) => a + c.n, 0));
+  const leads = byNewest(LEADS)
+    .filter((l) => !isProductKey(sp.product) || l.product === sp.product)
+    .filter((l) => !(sp.status && STATUS[sp.status]) || l.status === sp.status)
+    .filter((l) => matches(sp.q ?? "", l.name, l.email, l.phone, l.company))
+    .map((l) => ({ ...l, workspace: wsById(l.workspace) }));
+  const count = (k?: string) => (k ? LEADS.filter((l) => l.status === k).length : LEADS.length);
+  const exportRows = [
+    ["Received", "Name", "Company", "Phone", "Email", "Product", "Source", "Status", "Message", "Notes"],
+    ...byNewest(LEADS).map((l) => [fmtDateTime(l.createdAt), l.name, l.company, l.phone, l.email, isProductKey(l.product) ? PRODUCTS[l.product].name : "", l.source, STATUS[l.status]?.[0] ?? l.status, l.message, l.notes]),
+  ];
   const tabHref = (status?: string) => {
     const q = new URLSearchParams();
     if (status) q.set("status", status);
@@ -56,10 +53,9 @@ export default async function AdminLeads({
           </p>
         </div>
         <div className="flex gap-2">
-          { }
-          <a href="/admin/export/leads" download className="btn btn-outline">
+          <ExportButton filename="leads.csv" rows={exportRows} className="btn btn-outline">
             <Icon name="Download" size={16} /> Export
-          </a>
+          </ExportButton>
           <Link href={sp.add ? "/admin/leads" : "/admin/leads?add=1"} className="btn btn-primary">
             <Icon name="Plus" size={16} /> Add lead
           </Link>

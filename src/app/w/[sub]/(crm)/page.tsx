@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { Badge, Notice, PageHeader, valueTone } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { CrmRecord } from "@/lib/models";
+import { RECORDS, byNewest } from "@/lib/demo-data";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
 import { fmtDate } from "@/lib/utils";
 import { getUsableWorkspace, wsBase } from "@/lib/workspace";
@@ -16,32 +15,23 @@ export default async function WorkspaceHome({
 }) {
   const { sub } = await params;
   const { paid } = await searchParams;
-  const s = await requireUser();
-  const { ws } = await getUsableWorkspace(sub, s);
-  const base = await wsBase(sub);
+  const { ws } = await getUsableWorkspace(sub);
+  const base = wsBase(sub);
   const p = PRODUCTS[ws.product as ProductKey];
 
-  const counts = await CrmRecord.aggregate<{ _id: string; n: number }>([
-    { $match: { workspace: ws._id } },
-    { $group: { _id: "$entity", n: { $sum: 1 } } },
-  ]);
-  const countOf = (k: string) => counts.find((c) => c._id === k)?.n ?? 0;
+  const mine = RECORDS.filter((r) => r.workspace === ws._id);
+  const countOf = (k: string) => mine.filter((r) => r.entity === k).length;
 
-  const boards = await Promise.all(
-    p.entities
-      .filter((e) => e.board && e.statusField)
-      .map(async (e) => {
-        const rows = await CrmRecord.aggregate<{ _id: string; n: number }>([
-          { $match: { workspace: ws._id, entity: e.key } },
-          { $group: { _id: `$data.${e.statusField}`, n: { $sum: 1 } } },
-        ]);
-        const opts = e.fields.find((f) => f.key === e.statusField)?.options ?? [];
-        return { e, stats: opts.map((o) => ({ label: o, n: rows.find((r) => r._id === o)?.n ?? 0 })) };
-      }),
-  );
+  const boards = p.entities
+    .filter((e) => e.board && e.statusField)
+    .map((e) => {
+      const rows = mine.filter((r) => r.entity === e.key);
+      const opts = e.fields.find((f) => f.key === e.statusField)?.options ?? [];
+      return { e, stats: opts.map((o) => ({ label: o, n: rows.filter((r) => r.data[e.statusField!] === o).length })) };
+    });
 
   const main = p.entities[0];
-  const recent = await CrmRecord.find({ workspace: ws._id, entity: main.key }).sort({ createdAt: -1 }).limit(6).lean();
+  const recent = byNewest(mine.filter((r) => r.entity === main.key)).slice(0, 6);
 
   return (
     <>

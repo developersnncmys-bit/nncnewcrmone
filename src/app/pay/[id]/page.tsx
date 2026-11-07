@@ -1,38 +1,22 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { isValidObjectId } from "mongoose";
 import { PayButton } from "@/components/PayButton";
-import { getSession } from "@/lib/auth";
 import { loginUrl } from "@/lib/billing";
-import { db } from "@/lib/db";
-import { Payment, User, Workspace } from "@/lib/models";
-import { checkPayToken } from "@/lib/paylink";
+import { PAYMENTS, wsById } from "@/lib/demo-data";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
-import { razorpayEnabled } from "@/lib/razorpay";
-import { BRAND, cycleEvery, cycleLabel, fmtDate, inr, tierLabel, workspaceHost } from "@/lib/utils";
+import { cycleEvery, cycleLabel, fmtDate, inr, tierLabel, workspaceHost } from "@/lib/utils";
 
 export const metadata = { title: "Payment", robots: { index: false } };
 
 const KIND_LABEL = { new: "New subscription", renewal: "Subscription renewal", change: "Plan change" } as const;
 
-/** Payment link page: /pay/<id>?t=<token>. Works without logging in. */
-export default async function PayPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ t?: string }>;
-}) {
+/** Payment link page: /pay/<id>. Demo only: the button simulates a successful payment. */
+export default async function PayPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { t } = await searchParams;
-  if (!isValidObjectId(id)) notFound();
-  await db();
-  const pay = await Payment.findById(id).lean();
-  const s = await getSession();
-  if (!pay || !(checkPayToken(id, t) || s?.role === "superadmin" || String(pay.user) === s?.uid)) notFound();
-  const ws = await Workspace.findById(pay.workspace).lean();
+  const pay = PAYMENTS.find((p) => p._id === id);
+  if (!pay) notFound();
+  const ws = wsById(pay.workspace);
   if (!ws) notFound();
-  const user = await User.findById(pay.user).lean();
   const p = PRODUCTS[ws.product as ProductKey];
   const total = pay.total || pay.amount;
 
@@ -82,18 +66,7 @@ export default async function PayPage({
             ) : pay.status === "failed" ? (
               <p className="text-center text-sm text-slate-500">Please use the latest payment link we emailed you, or contact us.</p>
             ) : (
-              <PayButton
-                paymentId={String(pay._id)}
-                token={t ?? ""}
-                orderId={pay.orderId}
-                amount={total}
-                keyId={process.env.RAZORPAY_KEY_ID || ""}
-                mock={!razorpayEnabled()}
-                brand={BRAND}
-                description={`${p.name} – ${tierLabel(pay.tier)} (${cycleLabel(pay.cycle)})`}
-                prefill={{ name: user?.name ?? "", email: user?.email ?? "", contact: user?.phone ?? "" }}
-                label={`Pay ${inr(total)}`}
-              />
+              <PayButton paymentId={pay._id} label={`Pay ${inr(total)}`} />
             )}
           </div>
           <p className="mt-4 text-center text-xs text-slate-500">Secure payment via Razorpay (UPI, cards, net banking).</p>

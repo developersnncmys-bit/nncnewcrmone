@@ -1,6 +1,6 @@
+import { ExportButton } from "@/components/client-bits";
 import { Badge, Empty, PageHeader } from "@/components/ui";
-import { db } from "@/lib/db";
-import { Payment } from "@/lib/models";
+import { PAYMENTS, byNewest, wsById } from "@/lib/demo-data";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
 import { cycleLabel, fmtDateTime, inr, tierLabel, workspaceHost } from "@/lib/utils";
 
@@ -8,14 +8,18 @@ export const metadata = { title: "Payments" };
 
 export default async function AdminPayments({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const { status } = await searchParams;
-  await db();
-  const filter = status === "created" || status === "paid" ? { status } : { status: "paid" };
-  const list = await Payment.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(300)
-    .populate<{ workspace: { companyName: string; subdomain: string } | null }>("workspace", "companyName subdomain")
-    .lean();
+  const filter = { status: status === "created" ? "created" : "paid" };
+  const list = byNewest(PAYMENTS)
+    .filter((p) => p.status === filter.status)
+    .map((p) => ({ ...p, workspace: wsById(p.workspace) }));
   const total = list.filter((p) => p.status === "paid").reduce((a, p) => a + (p.total || p.amount), 0);
+  const exportRows = [
+    ["Date", "Invoice", "Customer", "Domain", "Product", "Plan", "Billing", "Type", "Amount", "GST", "Total", "Status"],
+    ...byNewest(PAYMENTS).map((p) => {
+      const w = wsById(p.workspace);
+      return [fmtDateTime(p.paidAt ?? p.createdAt), p.invoiceNumber, w?.companyName ?? "", w ? workspaceHost(w.subdomain) : "", PRODUCTS[p.product as ProductKey].name, tierLabel(p.tier), cycleLabel(p.cycle), p.kind, p.amount, p.gstAmount, p.total, p.status];
+    }),
+  ];
 
   return (
     <>
@@ -24,10 +28,9 @@ export default async function AdminPayments({ searchParams }: { searchParams: Pr
         subtitle={filter.status === "paid" ? `Total collected (incl. GST): ${inr(total)}` : "Checkouts started but not paid yet"}
         actions={
           <>
-            { }
-            <a href="/admin/export/payments" download className="btn btn-outline">
+            <ExportButton filename="payments.csv" rows={exportRows} className="btn btn-outline">
               Export to Excel
-            </a>
+            </ExportButton>
             <a href="/admin/payments" className={`btn ${filter.status === "paid" ? "btn-primary" : "btn-outline"}`}>
               Paid
             </a>

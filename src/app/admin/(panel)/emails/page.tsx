@@ -1,24 +1,14 @@
 import { Badge, Empty, PageHeader } from "@/components/ui";
-import { db } from "@/lib/db";
-import { EmailLog } from "@/lib/models";
+import { EMAILS } from "@/lib/demo-data";
 import { fmtDateTime } from "@/lib/utils";
 
 export const metadata = { title: "Email log" };
 
-export default async function AdminEmails() {
-  await db();
-  const list = await EmailLog.find().sort({ createdAt: -1 }).limit(300).lean();
-  const smtp = !!process.env.SMTP_HOST;
+export default function AdminEmails() {
+  const list = EMAILS;
   return (
     <>
-      <PageHeader
-        title="Email log"
-        subtitle={
-          smtp
-            ? "Every reminder, invoice and welcome email sent by the system."
-            : "SMTP is not configured — emails are only logged here. Add SMTP settings in .env.local to send real emails."
-        }
-      />
+      <PageHeader title="Email log" subtitle="Every reminder, invoice and welcome email sent by the system." />
       {list.length === 0 ? (
         <Empty title="No emails yet" />
       ) : (

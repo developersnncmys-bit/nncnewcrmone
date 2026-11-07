@@ -3,7 +3,6 @@ import { SideNav, type NavItem } from "@/components/client-bits";
 import { Icon } from "@/components/Icon";
 import { WorkspaceStatus } from "@/components/ui";
 import { workspaceLogoutAction } from "@/app/actions/auth";
-import { requireUser } from "@/lib/auth";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
 import { cycleLabel, daysLeft, fmtDate, tierLabel, workspaceHost } from "@/lib/utils";
 import { canManage, getWorkspaceAccess, wsBase } from "@/lib/workspace";
@@ -16,9 +15,8 @@ export default async function WorkspaceLayout({
   params: Promise<{ sub: string }>;
 }) {
   const { sub } = await params;
-  const s = await requireUser();
-  const { ws, role } = await getWorkspaceAccess(sub, s);
-  const base = await wsBase(sub);
+  const { ws, s, role } = await getWorkspaceAccess(sub);
+  const base = wsBase(sub);
   const p = PRODUCTS[ws.product as ProductKey];
 
   const items: NavItem[] = [
