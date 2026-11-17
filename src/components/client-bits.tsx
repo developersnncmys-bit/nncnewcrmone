@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useActionState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useActionState, useEffect, type ReactNode } from "react";
 import { Icon } from "./Icon";
 import type { FormState } from "@/app/actions/auth";
 
@@ -156,5 +156,42 @@ export function ExportButton({ filename, rows, className, children }: { filename
     <button type="button" onClick={download} className={className}>
       {children}
     </button>
+  );
+}
+
+/**
+ * Popup dialog shown over the page. It is opened by a link that adds ?view=<id> to the URL,
+ * and closes (✕, click outside, Esc) by going to `closeHref`.
+ */
+export function Modal({ closeHref, title, subtitle, children, footer }: { closeHref: string; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+  const router = useRouter();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && router.push(closeHref, { scroll: false });
+    document.addEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [closeHref, router]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true">
+      <Link href={closeHref} scroll={false} aria-label="Close" className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" />
+      <div className="relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-semibold text-slate-900">{title}</h2>
+            {subtitle && <div className="mt-0.5 text-sm text-slate-500">{subtitle}</div>}
+          </div>
+          <Link href={closeHref} scroll={false} aria-label="Close" className="-mr-2 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <Icon name="X" size={18} />
+          </Link>
+        </div>
+        <div className="overflow-y-auto px-6 py-5">{children}</div>
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50/70 px-6 py-3">{footer}</div>}
+      </div>
+    </div>
   );
 }

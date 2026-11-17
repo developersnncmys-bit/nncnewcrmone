@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { addLeadManually, updateLead } from "@/app/actions/admin";
 import { ResultForm, SubmitButton } from "@/components/admin-ui";
-import { ExportButton } from "@/components/client-bits";
+import { ExportButton, Modal } from "@/components/client-bits";
 import { Icon } from "@/components/Icon";
-import { Badge, Empty, type Tone } from "@/components/ui";
-import { LEADS, byNewest, matches, wsById } from "@/lib/demo-data";
+import { Badge, DetailList, Empty, whatsappLink, type Tone } from "@/components/ui";
+import { EMAILS, LEADS, byNewest, matches, wsById } from "@/lib/demo-data";
 import { PRODUCTS, isProductKey, productList, type ProductKey } from "@/lib/products";
 import { fmtDateTime, workspaceHost } from "@/lib/utils";
 
@@ -22,7 +22,7 @@ const SOURCES = ["Phone", "WhatsApp", "Walk-in", "Referral", "Email", "Social me
 export default async function AdminLeads({
   searchParams,
 }: {
-  searchParams: Promise<{ product?: string; status?: string; q?: string; id?: string; add?: string }>;
+  searchParams: Promise<{ product?: string; status?: string; q?: string; id?: string; add?: string; view?: string }>;
 }) {
   const sp = await searchParams;
   const leads = byNewest(LEADS)
@@ -42,6 +42,15 @@ export default async function AdminLeads({
     if (sp.q) q.set("q", sp.q);
     return `/admin/leads${q.size ? `?${q}` : ""}`;
   };
+  // Popup: ?view=<lead id> opens it; closing keeps the current tab / filters.
+  const viewHref = (id?: string) => {
+    const q = new URLSearchParams();
+    for (const k of ["status", "product", "q"] as const) if (sp[k]) q.set(k, sp[k]!);
+    if (id) q.set("view", id);
+    return `/admin/leads${q.size ? `?${q}` : ""}`;
+  };
+  const viewing = sp.view ? LEADS.find((l) => l._id === sp.view) : undefined;
+  const viewingWs = viewing ? wsById(viewing.workspace) : null;
 
   return (
     <>
@@ -167,19 +176,19 @@ export default async function AdminLeads({
                 const p = isProductKey(l.product) ? PRODUCTS[l.product as ProductKey] : null;
                 const [label, tone] = STATUS[l.status] ?? [l.status, "slate"];
                 return (
-                  <tr key={String(l._id)} className={`align-top ${sp.id === String(l._id) ? "bg-indigo-50/60" : "hover:bg-slate-50/60"}`}>
+                  <tr key={String(l._id)} className={`align-top ${sp.id === String(l._id) || sp.view === l._id ? "bg-indigo-50/60" : "hover:bg-slate-50/60"}`}>
                     <td className="td">
-                      <div className="flex items-start gap-3">
+                      <Link href={viewHref(l._id)} scroll={false} className="group flex items-start gap-3" title="View lead details">
                         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-700">
                           {l.name.slice(0, 1).toUpperCase()}
                         </span>
                         <div>
-                          <div className="font-semibold text-navy">{l.name}</div>
+                          <div className="font-semibold text-navy group-hover:text-indigo-600 group-hover:underline">{l.name}</div>
                           {l.company && <div className="text-xs text-slate-600">{l.company}</div>}
                           <div className="text-xs text-slate-500">{[l.phone, l.email].filter(Boolean).join(" · ")}</div>
                           {l.message && <div className="mt-1 max-w-xs text-xs whitespace-normal text-slate-500 italic">“{l.message}”</div>}
                         </div>
-                      </div>
+                      </Link>
                     </td>
                     <td className="td">
                       {p ? (
@@ -216,15 +225,20 @@ export default async function AdminLeads({
                       </form>
                     </td>
                     <td className="td text-right">
-                      {l.workspace ? (
-                        <Link href={`/admin/workspaces/${l.workspace._id}`} className="btn btn-outline btn-sm">
-                          View customer
+                      <div className="flex flex-col items-end gap-2">
+                        {l.workspace ? (
+                          <Link href={`/admin/workspaces/${l.workspace._id}`} className="btn btn-outline btn-sm">
+                            View customer
+                          </Link>
+                        ) : (
+                          <Link href={`/admin/workspaces/new?lead=${l._id}`} className="btn btn-primary btn-sm">
+                            Create CRM →
+                          </Link>
+                        )}
+                        <Link href={viewHref(l._id)} scroll={false} className="btn btn-ghost btn-sm">
+                          Details
                         </Link>
-                      ) : (
-                        <Link href={`/admin/workspaces/new?lead=${l._id}`} className="btn btn-primary btn-sm">
-                          Create CRM →
-                        </Link>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -232,6 +246,93 @@ export default async function AdminLeads({
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewing && (
+        <Modal
+          closeHref={viewHref()}
+          title={viewing.name}
+          subtitle={
+            <span className="flex flex-wrap items-center gap-2">
+              {viewing.company || "No company"}
+              <Badge tone={(STATUS[viewing.status] ?? [viewing.status, "slate"])[1]}>{(STATUS[viewing.status] ?? [viewing.status])[0]}</Badge>
+            </span>
+          }
+          footer={
+            <>
+              <Link href={viewHref()} scroll={false} className="btn btn-outline">
+                Close
+              </Link>
+              {viewingWs ? (
+                <Link href={`/admin/workspaces/${viewingWs._id}`} className="btn btn-primary">
+                  View customer
+                </Link>
+              ) : (
+                <Link href={`/admin/workspaces/new?lead=${viewing._id}`} className="btn btn-primary">
+                  Create CRM →
+                </Link>
+              )}
+            </>
+          }
+        >
+          <div className="mb-5 flex flex-wrap gap-2">
+            {viewing.phone && (
+              <a href={`tel:${viewing.phone.replace(/\s/g, "")}`} className="btn btn-outline btn-sm">
+                <Icon name="Phone" size={14} /> Call
+              </a>
+            )}
+            {viewing.phone && (
+              <a href={whatsappLink(viewing.phone)} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">
+                <Icon name="MessageCircle" size={14} /> WhatsApp
+              </a>
+            )}
+            {viewing.email && (
+              <a href={`mailto:${viewing.email}`} className="btn btn-outline btn-sm">
+                <Icon name="Mail" size={14} /> Email
+              </a>
+            )}
+          </div>
+
+          <DetailList
+            rows={[
+              ["Phone", viewing.phone],
+              ["Email", viewing.email],
+              ["Company", viewing.company],
+              ["Interested in", isProductKey(viewing.product) ? PRODUCTS[viewing.product].name : "Not decided"],
+              ["Source", viewing.source || "website"],
+              ["Received", fmtDateTime(viewing.createdAt)],
+              ["Customer CRM", viewingWs ? workspaceHost(viewingWs.subdomain) : "Not created yet"],
+            ]}
+          />
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Requirement</div>
+              <p className="mt-1 text-sm whitespace-pre-line text-slate-700">{viewing.message || "—"}</p>
+            </div>
+            <div className="rounded-xl bg-amber-50/70 p-4">
+              <div className="text-xs font-semibold tracking-wide text-amber-700 uppercase">Follow-up notes</div>
+              <p className="mt-1 text-sm whitespace-pre-line text-slate-700">{viewing.notes || "No notes yet."}</p>
+            </div>
+          </div>
+
+          {(() => {
+            const mails = EMAILS.filter((m) => m.to === viewing.email || (viewingWs && m.workspace === viewingWs._id)).slice(0, 5);
+            return mails.length > 0 ? (
+              <div className="mt-5">
+                <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Recent emails</div>
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {mails.map((m) => (
+                    <li key={m._id} className="flex justify-between gap-4 py-2">
+                      <span className="text-slate-700">{m.subject}</span>
+                      <span className="shrink-0 text-xs text-slate-500">{fmtDateTime(m.createdAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null;
+          })()}
+        </Modal>
       )}
     </>
   );

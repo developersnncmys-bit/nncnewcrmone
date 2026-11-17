@@ -1,13 +1,13 @@
 import {
   ArrowRight, Bell, Building2, CalendarDays, Check, CheckSquare, Clock, Contact, CreditCard, FileText, Globe,
   Handshake, Inbox, Kanban, LayoutDashboard, List, Lock, LogOut, Mail, Package, Plane, Search, Settings, Sparkles, Download, Phone, Activity, Plus, ShieldCheck,
-  Ticket, TrendingUp, UserCog, Users, Wallet, type LucideProps,
+  Ticket, TrendingUp, UserCog, Users, Wallet, X, MessageCircle, ExternalLink, Eye, EyeOff, AlertCircle, Loader2, type LucideProps,
 } from "lucide-react";
 
 const ICONS = {
   ArrowRight, Bell, Building2, CalendarDays, Check, CheckSquare, Clock, Contact, CreditCard, FileText, Globe,
   Handshake, Inbox, Kanban, LayoutDashboard, List, Lock, LogOut, Mail, Package, Plane, Search, Settings, Sparkles, Download, Phone, Activity, Plus, ShieldCheck,
-  Ticket, TrendingUp, UserCog, Users, Wallet,
+  Ticket, TrendingUp, UserCog, Users, Wallet, X, MessageCircle, ExternalLink, Eye, EyeOff, AlertCircle, Loader2,
 };
 
 export type IconName = keyof typeof ICONS;

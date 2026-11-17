@@ -1,5 +1,6 @@
 import { changeAdminPassword, updateAdminProfile } from "@/app/actions/admin";
 import { ResultForm, SubmitButton } from "@/components/admin-ui";
+import { PasswordInput } from "@/components/AuthForms";
 import { Badge, Panel } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { requireAdmin } from "@/lib/auth";
@@ -50,18 +51,9 @@ export default async function SettingsPage() {
 
         <Panel title="Change password">
           <ResultForm action={changeAdminPassword} className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="label">Current password</label>
-              <input name="current" type="password" required className="input" />
-            </div>
-            <div>
-              <label className="label">New password (min 8)</label>
-              <input name="password" type="password" minLength={8} required className="input" />
-            </div>
-            <div>
-              <label className="label">Confirm new password</label>
-              <input name="confirm" type="password" minLength={8} required className="input" />
-            </div>
+            <PasswordInput className="sm:col-span-2" label="Current password" name="current" required autoComplete="current-password" />
+            <PasswordInput label="New password" name="password" minLength={8} required autoComplete="new-password" hint="At least 8 characters." />
+            <PasswordInput label="Confirm new password" name="confirm" minLength={8} required autoComplete="new-password" />
             <div className="sm:col-span-2">
               <SubmitButton>Change password</SubmitButton>
             </div>

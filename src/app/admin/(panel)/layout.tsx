@@ -15,7 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen md:flex">
-      <aside className="bg-navy p-4 md:sticky md:top-0 md:flex md:h-screen md:w-64 md:shrink-0 md:flex-col">
+      <aside className="no-print bg-navy p-4 md:sticky md:top-0 md:flex md:h-screen md:w-64 md:shrink-0 md:flex-col">
         <div className="mb-7 px-2 pt-1">
           <Logo dark sub="Admin console" />
         </div>
@@ -66,7 +66,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 backdrop-blur md:px-8">
+        <header className="no-print sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 backdrop-blur md:px-8">
           <form action="/admin/search" className="relative w-full max-w-md">
             <Icon name="Search" size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
             <input name="q" placeholder="Search customers, domains, leads, invoices…" className="input pl-9" />
@@ -86,7 +86,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </Link>
           </div>
         </header>
-        <main className="p-4 md:p-8">{children}</main>
+        <main className="p-4 md:p-8 print:p-0">{children}</main>
       </div>
     </div>
   );

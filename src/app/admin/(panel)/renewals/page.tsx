@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { sendPaymentLink } from "@/app/actions/admin";
 import { ActionButton } from "@/components/admin-ui";
-import { Badge, Empty, Kpi } from "@/components/ui";
+import { Modal } from "@/components/client-bits";
+import { Badge, DetailList, Empty, Kpi, WorkspaceStatus, whatsappLink } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { RENEWAL_TABS, renewalBuckets, type RenewalTab } from "@/lib/admin-stats";
+import { renewalPlanFor } from "@/lib/billing";
+import { EMAILS, ownerOf, paymentsOf, wsById } from "@/lib/demo-data";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
-import { cycleLabel, daysLeft, fmtDate, fmtDateTime, inr, tierLabel, workspaceHost } from "@/lib/utils";
+import { cycleLabel, daysLeft, fmtDate, fmtDateTime, inr, tierLabel, withGst, workspaceHost } from "@/lib/utils";
 
 export const metadata = { title: "Renewals" };
 
@@ -19,13 +22,16 @@ const MAIL_LABEL: Record<string, string> = {
   welcome: "Welcome + link",
 };
 
-export default async function RenewalsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  const { tab: tabParam } = await searchParams;
+export default async function RenewalsPage({ searchParams }: { searchParams: Promise<{ tab?: string; view?: string }> }) {
+  const { tab: tabParam, view } = await searchParams;
   const b = await renewalBuckets();
   const tab: RenewalTab = RENEWAL_TABS.some((t) => t.key === tabParam) ? (tabParam as RenewalTab) : b.due.length || !b.grace.length ? "due" : "grace";
   const count = (k: RenewalTab) => b[k].length;
   const sum = (k: Exclude<RenewalTab, "renewed">) => b[k].reduce((a, r) => a + r.dueTotal, 0);
   const renewedSum = b.renewed.reduce((a, r) => a + (r.payment.total || r.payment.amount), 0);
+  // Popup: ?view=<customer id> opens it; closing stays on the same tab.
+  const viewHref = (id?: string) => `/admin/renewals?tab=${tab}${id ? `&view=${id}` : ""}`;
+  const vw = view ? wsById(view) : null;
 
   return (
     <>
@@ -77,7 +83,7 @@ export default async function RenewalsPage({ searchParams }: { searchParams: Pro
                 {b.renewed.map(({ ws, payment }) => (
                   <tr key={String(payment._id)}>
                     <td className="td">
-                      <Link href={`/admin/workspaces/${ws._id}`} className="font-medium text-slate-900 hover:text-indigo-600">
+                      <Link href={viewHref(String(ws._id))} scroll={false} title="View details" className="font-medium text-slate-900 hover:text-indigo-600 hover:underline">
                         {ws.companyName}
                       </Link>
                       <div className="text-xs text-slate-500">{workspaceHost(ws.subdomain)}</div>
@@ -118,7 +124,7 @@ export default async function RenewalsPage({ searchParams }: { searchParams: Pro
                 return (
                   <tr key={String(ws._id)} className="align-top hover:bg-slate-50">
                     <td className="td">
-                      <Link href={`/admin/workspaces/${ws._id}`} className="font-medium text-slate-900 hover:text-indigo-600">
+                      <Link href={viewHref(String(ws._id))} scroll={false} title="View details" className="font-medium text-slate-900 hover:text-indigo-600 hover:underline">
                         {ws.companyName}
                       </Link>
                       <div className="text-xs text-slate-500">{workspaceHost(ws.subdomain)}</div>
@@ -165,6 +171,9 @@ export default async function RenewalsPage({ searchParams }: { searchParams: Pro
                         <ActionButton action={sendPaymentLink.bind(null, String(ws._id))} className="btn btn-primary btn-sm">
                           Send payment link
                         </ActionButton>
+                        <Link href={viewHref(String(ws._id))} scroll={false} className="btn btn-outline btn-sm">
+                          Details
+                        </Link>
                         <Link href={`/admin/workspaces/${ws._id}`} className="btn btn-outline btn-sm">
                           Manage
                         </Link>
@@ -177,6 +186,138 @@ export default async function RenewalsPage({ searchParams }: { searchParams: Pro
           </table>
         </div>
       )}
+      {vw &&
+        (() => {
+          const owner = ownerOf(vw);
+          const p = PRODUCTS[vw.product as ProductKey];
+          const next = renewalPlanFor(vw);
+          const g = withGst(next.amount);
+          const pays = paymentsOf(vw._id).slice(0, 4);
+          const mails = EMAILS.filter((m) => m.workspace === vw._id).slice(0, 4);
+          const phone = vw.contact.phone || owner?.phone || "";
+          const email = vw.contact.email || owner?.email || "";
+          const end = vw.status === "grace" ? vw.graceEndsAt : vw.currentPeriodEnd;
+          const d = daysLeft(vw.currentPeriodEnd);
+          return (
+            <Modal
+              closeHref={viewHref()}
+              title={vw.companyName}
+              subtitle={
+                <span className="flex flex-wrap items-center gap-2">
+                  {p.name} · {workspaceHost(vw.subdomain)} <WorkspaceStatus status={vw.status} />
+                </span>
+              }
+              footer={
+                <>
+                  <Link href={viewHref()} scroll={false} className="btn btn-outline">
+                    Close
+                  </Link>
+                  <Link href={`/admin/workspaces/${vw._id}`} className="btn btn-outline">
+                    Manage customer
+                  </Link>
+                </>
+              }
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl bg-indigo-50/70 p-4">
+                  <div className="text-xs font-semibold tracking-wide text-indigo-700 uppercase">Next payment</div>
+                  <div className="mt-1 text-2xl font-bold text-slate-900">{inr(g.total)}</div>
+                  <div className="text-xs text-slate-600">
+                    {tierLabel(next.tier)} · {cycleLabel(next.cycle)} · {inr(next.amount)} + {inr(g.gst)} GST
+                  </div>
+                  {vw.scheduledChange && <div className="mt-1 text-xs text-indigo-700">Plan change applies at this renewal</div>}
+                </div>
+                <div className={`rounded-xl p-4 ${vw.status === "active" ? "bg-amber-50/70" : vw.status === "pending" ? "bg-sky-50/70" : "bg-rose-50/70"}`}>
+                  <div className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
+                    {vw.status === "pending" ? "Waiting since" : vw.status === "grace" ? "Locks on" : vw.status === "locked" ? "Locked since" : "Renews on"}
+                  </div>
+                  <div className="mt-1 text-2xl font-bold text-slate-900">{fmtDate(vw.status === "pending" ? vw.createdAt : end)}</div>
+                  <div className="text-xs text-slate-600">
+                    {vw.status === "pending"
+                      ? "CRM created, first payment not received"
+                      : vw.status === "active"
+                        ? `${d} day${d === 1 ? "" : "s"} left`
+                        : `Plan ended ${fmtDate(vw.currentPeriodEnd)} · ${Math.abs(d)} days ago`}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-start gap-2">
+                <ActionButton action={sendPaymentLink.bind(null, String(vw._id))} className="btn btn-primary btn-sm">
+                  Send payment link
+                </ActionButton>
+                {phone && (
+                  <a href={`tel:${phone.replace(/\s/g, "")}`} className="btn btn-outline btn-sm">
+                    <Icon name="Phone" size={14} /> Call
+                  </a>
+                )}
+                {phone && (
+                  <a href={whatsappLink(phone)} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">
+                    <Icon name="MessageCircle" size={14} /> WhatsApp
+                  </a>
+                )}
+                {email && (
+                  <a href={`mailto:${email}`} className="btn btn-outline btn-sm">
+                    <Icon name="Mail" size={14} /> Email
+                  </a>
+                )}
+              </div>
+
+              <h3 className="mt-6 mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">Customer</h3>
+              <DetailList
+                rows={[
+                  ["Contact person", vw.contact.name || owner?.name || ""],
+                  ["Phone", phone],
+                  ["Email", email],
+                  ["Current plan", `${tierLabel(vw.plan.tier)} · ${cycleLabel(vw.plan.cycle)} · ${inr(vw.plan.price)} + GST`],
+                  ["Current period", vw.currentPeriodStart ? `${fmtDate(vw.currentPeriodStart)} → ${fmtDate(vw.currentPeriodEnd)}` : "Not paid yet"],
+                  ["GSTIN", vw.billing.gstin],
+                  ["State", vw.billing.state],
+                  ["Customer since", fmtDate(vw.createdAt)],
+                ]}
+              />
+              {vw.notes && <p className="mt-3 rounded-lg bg-amber-50/70 px-3 py-2 text-sm text-slate-700">Note: {vw.notes}</p>}
+
+              {pays.length > 0 && (
+                <>
+                  <h3 className="mt-6 mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">Recent payments</h3>
+                  <ul className="divide-y divide-slate-100 text-sm">
+                    {pays.map((x) => (
+                      <li key={x._id} className="flex items-center justify-between gap-4 py-2">
+                        <span>
+                          <span className="font-medium text-slate-800">{inr(x.total || x.amount)}</span>{" "}
+                          <span className="text-xs text-slate-500">
+                            · {fmtDate(x.paidAt ?? x.createdAt)} · {tierLabel(x.tier)} {cycleLabel(x.cycle)}
+                          </span>
+                        </span>
+                        <Link href={`/admin/payments/${x._id}`} className="shrink-0 text-xs font-medium text-indigo-600 hover:underline">
+                          {x.status === "paid" ? x.invoiceNumber : x.status === "created" ? "Unpaid · proforma" : "Cancelled"}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {mails.length > 0 && (
+                <>
+                  <h3 className="mt-6 mb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">Recent emails</h3>
+                  <ul className="divide-y divide-slate-100 text-sm">
+                    {mails.map((m) => (
+                      <li key={m._id} className="flex justify-between gap-4 py-2">
+                        <span className="text-slate-700">
+                          {MAIL_LABEL[m.type] ?? m.subject}
+                          {m.status === "failed" && <span className="ml-2 text-xs text-rose-600">failed</span>}
+                        </span>
+                        <span className="shrink-0 text-xs text-slate-500">{fmtDateTime(m.createdAt)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </Modal>
+          );
+        })()}
     </>
   );
 }

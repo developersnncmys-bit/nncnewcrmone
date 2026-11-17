@@ -1,11 +1,14 @@
-import { Badge, Empty, PageHeader } from "@/components/ui";
+import { Badge, Empty, PageHeader, Pagination, paginate } from "@/components/ui";
 import { EMAILS } from "@/lib/demo-data";
 import { fmtDateTime } from "@/lib/utils";
 
 export const metadata = { title: "Email log" };
 
-export default function AdminEmails() {
+const PER_PAGE = 15;
+
+export default async function AdminEmails({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const list = EMAILS;
+  const pg = paginate(list, (await searchParams).page, PER_PAGE);
   return (
     <>
       <PageHeader title="Email log" subtitle="Every reminder, invoice and welcome email sent by the system." />
@@ -24,7 +27,7 @@ export default function AdminEmails() {
               </tr>
             </thead>
             <tbody>
-              {list.map((e) => (
+              {pg.rows.map((e) => (
                 <tr key={String(e._id)}>
                   <td className="td text-xs">{fmtDateTime(e.createdAt)}</td>
                   <td className="td">
@@ -42,6 +45,7 @@ export default function AdminEmails() {
           </table>
         </div>
       )}
+      <Pagination {...pg} href={(n) => `/admin/emails?page=${n}`} />
     </>
   );
 }

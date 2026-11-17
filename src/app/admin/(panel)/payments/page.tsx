@@ -1,18 +1,23 @@
+import Link from "next/link";
 import { ExportButton } from "@/components/client-bits";
-import { Badge, Empty, PageHeader } from "@/components/ui";
+import { Badge, Empty, PageHeader, Pagination, paginate } from "@/components/ui";
 import { PAYMENTS, byNewest, wsById } from "@/lib/demo-data";
 import { PRODUCTS, type ProductKey } from "@/lib/products";
 import { cycleLabel, fmtDateTime, inr, tierLabel, workspaceHost } from "@/lib/utils";
 
 export const metadata = { title: "Payments" };
 
-export default async function AdminPayments({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const { status } = await searchParams;
+const PER_PAGE = 10;
+
+export default async function AdminPayments({ searchParams }: { searchParams: Promise<{ status?: string; page?: string }> }) {
+  const { status, page: pageParam } = await searchParams;
   const filter = { status: status === "created" ? "created" : "paid" };
   const list = byNewest(PAYMENTS)
     .filter((p) => p.status === filter.status)
     .map((p) => ({ ...p, workspace: wsById(p.workspace) }));
   const total = list.filter((p) => p.status === "paid").reduce((a, p) => a + (p.total || p.amount), 0);
+  const pg = paginate(list, pageParam, PER_PAGE);
+  const pageHref = (n: number) => `/admin/payments?${filter.status === "created" ? "status=created&" : ""}page=${n}`;
   const exportRows = [
     ["Date", "Invoice", "Customer", "Domain", "Product", "Plan", "Billing", "Type", "Amount", "GST", "Total", "Status"],
     ...byNewest(PAYMENTS).map((p) => {
@@ -31,12 +36,12 @@ export default async function AdminPayments({ searchParams }: { searchParams: Pr
             <ExportButton filename="payments.csv" rows={exportRows} className="btn btn-outline">
               Export to Excel
             </ExportButton>
-            <a href="/admin/payments" className={`btn ${filter.status === "paid" ? "btn-primary" : "btn-outline"}`}>
+            <Link href="/admin/payments" className={`btn ${filter.status === "paid" ? "btn-primary" : "btn-outline"}`}>
               Paid
-            </a>
-            <a href="/admin/payments?status=created" className={`btn ${filter.status === "created" ? "btn-primary" : "btn-outline"}`}>
+            </Link>
+            <Link href="/admin/payments?status=created" className={`btn ${filter.status === "created" ? "btn-primary" : "btn-outline"}`}>
               Unpaid / abandoned
-            </a>
+            </Link>
           </>
         }
       />
@@ -56,13 +61,22 @@ export default async function AdminPayments({ searchParams }: { searchParams: Pr
                 <th className="th text-right">Amount</th>
                 <th className="th text-right">GST</th>
                 <th className="th text-right">Total</th>
+                <th className="th"></th>
               </tr>
             </thead>
             <tbody>
-              {list.map((p) => (
-                <tr key={String(p._id)}>
+              {pg.rows.map((p) => (
+                <tr key={String(p._id)} className="hover:bg-slate-50">
                   <td className="td text-xs">{fmtDateTime(p.paidAt ?? p.createdAt)}</td>
-                  <td className="td font-mono text-xs">{p.invoiceNumber || "—"}</td>
+                  <td className="td font-mono text-xs">
+                    {p.invoiceNumber ? (
+                      <Link href={`/admin/payments/${p._id}`} className="text-indigo-600 hover:underline">
+                        {p.invoiceNumber}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="td">
                     <div className="font-medium">{p.workspace?.companyName}</div>
                     <div className="text-xs text-slate-500">{p.workspace && workspaceHost(p.workspace.subdomain)}</div>
@@ -77,12 +91,18 @@ export default async function AdminPayments({ searchParams }: { searchParams: Pr
                   <td className="td text-right">{inr(p.amount)}</td>
                   <td className="td text-right">{inr(p.gstAmount)}</td>
                   <td className="td text-right font-medium">{inr(p.total || p.amount)}</td>
+                  <td className="td text-right">
+                    <Link href={`/admin/payments/${p._id}`} className="btn btn-outline btn-sm">
+                      {p.status === "paid" ? "Invoice" : "Proforma"}
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      <Pagination {...pg} href={pageHref} />
     </>
   );
 }

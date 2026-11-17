@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 const TONES = {
   slate: "bg-slate-100 text-slate-700",
@@ -134,3 +135,78 @@ export function Panel({ title, action, children, className = "" }: { title: stri
     </section>
   );
 }
+
+/** Cuts a list into pages. `page` comes from the URL (?page=2) and is clamped to a valid page. */
+export function paginate<T>(list: T[], pageParam: string | undefined, perPage: number) {
+  const pages = Math.max(1, Math.ceil(list.length / perPage));
+  const page = Math.min(pages, Math.max(1, Number(pageParam) || 1));
+  const from = (page - 1) * perPage;
+  return { rows: list.slice(from, from + perPage), page, pages, from: list.length ? from + 1 : 0, to: Math.min(from + perPage, list.length), total: list.length };
+}
+
+/** "Showing 11–20 of 42" + Previous / page numbers / Next. `href(n)` builds the link for page n. */
+export function Pagination({ page, pages, from, to, total, href }: { page: number; pages: number; from: number; to: number; total: number; href: (n: number) => string }) {
+  if (total === 0) return null;
+  // Always show first, last, and the pages next to the current one; "…" for gaps.
+  const nums = [...new Set([1, page - 1, page, page + 1, pages])].filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b);
+  const btn = "inline-flex h-9 min-w-9 items-center justify-center rounded-lg px-3 text-sm font-medium";
+  return (
+    <nav className="no-print mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Pagination">
+      <p className="text-sm text-slate-500">
+        Showing <b className="text-slate-700">{from}</b>–<b className="text-slate-700">{to}</b> of <b className="text-slate-700">{total}</b>
+      </p>
+      {pages > 1 && (
+        <div className="flex flex-wrap items-center gap-1">
+          {page > 1 ? (
+            <Link href={href(page - 1)} className={`${btn} text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>
+              ← Previous
+            </Link>
+          ) : (
+            <span className={`${btn} cursor-not-allowed text-slate-300 ring-1 ring-slate-100`}>← Previous</span>
+          )}
+          {nums.map((n, i) => (
+            <span key={n} className="flex items-center gap-1">
+              {i > 0 && n - nums[i - 1] > 1 && <span className="px-1 text-slate-400">…</span>}
+              {n === page ? (
+                <span aria-current="page" className={`${btn} bg-indigo-600 text-white`}>
+                  {n}
+                </span>
+              ) : (
+                <Link href={href(n)} className={`${btn} text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>
+                  {n}
+                </Link>
+              )}
+            </span>
+          ))}
+          {page < pages ? (
+            <Link href={href(page + 1)} className={`${btn} text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50`}>
+              Next →
+            </Link>
+          ) : (
+            <span className={`${btn} cursor-not-allowed text-slate-300 ring-1 ring-slate-100`}>Next →</span>
+          )}
+        </div>
+      )}
+    </nav>
+  );
+}
+
+/** Two-column "label → value" list used inside popups and detail cards. */
+export function DetailList({ rows }: { rows: [string, ReactNode][] }) {
+  return (
+    <dl className="divide-y divide-slate-100 text-sm">
+      {rows.map(([k, v]) => (
+        <div key={k} className="flex justify-between gap-6 py-2">
+          <dt className="shrink-0 text-slate-500">{k}</dt>
+          <dd className="text-right font-medium break-words text-slate-800">{v || <span className="text-slate-300">—</span>}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Phone number → WhatsApp chat link (assumes India +91 when no country code is given). */
+export const whatsappLink = (phone: string) => {
+  const d = phone.replace(/\D/g, "");
+  return `https://wa.me/${d.length === 10 ? `91${d}` : d}`;
+};
